@@ -1,0 +1,9 @@
+nycu-hw2-data/
+checkpoints/
+nycu-hw2-data.zip
+*.pyc
+*.pyo
+*.pyd
+*.zip
+*.json
+__pycache__/
