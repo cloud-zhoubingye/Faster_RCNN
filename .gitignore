@@ -7,5 +7,5 @@ nycu-hw2-data.zip
 *.zip
 *.json
 __pycache__/
-results/
+result/
 
