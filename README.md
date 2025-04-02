@@ -1,7 +1,8 @@
 # Faster R-CNN for digits detection
 This is HW2 of Visual Recognition using Deep Learning, 2025 Spring, NYCU.  
 - Student ID: 113550901  
-- Student Name: zby
+- Student Name: 周炳燁
+
 
 ## Introduction
 #### Overview
