@@ -1,26 +1,27 @@
-import torch
 import os
-import torchvision
-import torchvision.transforms as transforms
-from torch.utils.data import DataLoader
-from torchvision.models.detection import (
-    fasterrcnn_resnet50_fpn_v2,
-    fasterrcnn_mobilenet_v3_large_320_fpn,
-)
-from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
-from sklearn.metrics import accuracy_score
+import json
+import torch
+import tqdm
 import numpy as np
+import pandas as pd
+import argparse
+from PIL import Image
+import torchvision
+import matplotlib.pyplot as plt
 from pycocotools.coco import COCO
 from pycocotools.cocoeval import COCOeval
-from torchvision.ops.boxes import box_convert
-import tqdm
-import json
-import pandas as pd
-import matplotlib.pyplot as plt
 import matplotlib.patches as patches
-from PIL import Image
-import argparse
+from torch.utils.data import DataLoader
 from torch.amp import autocast, GradScaler
+import torchvision.transforms as transforms
+from torchvision.ops.boxes import box_convert
+import torchvision.transforms.v2 as transforms_v2
+import torchvision.transforms.functional as F
+from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
+from torchvision.models.detection import (
+    fasterrcnn_mobilenet_v3_large_320_fpn,
+    fasterrcnn_resnet50_fpn_v2,
+)
 
 
 class TestDataset(torch.utils.data.Dataset):
@@ -42,6 +43,45 @@ class TestDataset(torch.utils.data.Dataset):
         return image, image_id
 
 
+class CocoDetectionV2(torchvision.datasets.CocoDetection):
+
+    def __getitem__(self, idx):
+        img, target = super(CocoDetectionV2, self).__getitem__(idx)
+
+        if len(target) > 0:
+            boxes = torch.tensor([obj["bbox"] for obj in target], dtype=torch.float32)
+            # [x, y, w, h] to [x1, y1, x2, y2]
+            boxes = box_convert(boxes, in_fmt="xywh", out_fmt="xyxy")
+            spatial_size = F.get_image_size(img)
+            transformed = self.transform(
+                {
+                    "image": img,
+                    "boxes": boxes,
+                    "labels": torch.tensor(
+                        [obj["category_id"] for obj in target], dtype=torch.int64
+                    ),
+                }
+            )
+            img = transformed["image"]
+            target_dict = {
+                "boxes": transformed["boxes"],
+                "labels": transformed["labels"],
+                "image_id": (
+                    torch.tensor(target[0]["image_id"]) if target else torch.tensor(-1)
+                ),
+            }
+        else:
+            target_dict = {
+                "boxes": torch.zeros((0, 4), dtype=torch.float32),
+                "labels": torch.zeros(0, dtype=torch.int64),
+                "image_id": torch.tensor(-1),
+            }
+            if self.transform is not None:
+                img = self.transform(img)
+
+        return img, target_dict
+
+
 def test_collate_fn(batch):
     images, image_ids = zip(*batch)
     images_list = []
@@ -52,29 +92,7 @@ def test_collate_fn(batch):
 
 def collate_fn(batch):
     images, targets = zip(*batch)
-    processed_targets = []
-    for t in targets:
-        if len(t) == 0:
-            processed_targets.append(
-                {
-                    "boxes": torch.zeros((0, 4), dtype=torch.float32),
-                    "labels": torch.zeros(0, dtype=torch.int64),
-                    "image_id": torch.tensor(-1),
-                }
-            )
-        else:
-            processed_targets.append(
-                {
-                    "boxes": box_convert(
-                        boxes=torch.stack([torch.tensor(obj["bbox"]) for obj in t]),
-                        in_fmt="xywh",
-                        out_fmt="xyxy",
-                    ),
-                    "labels": torch.tensor([obj["category_id"] for obj in t]),
-                    "image_id": torch.tensor(t[0]["image_id"]) if t else -1,
-                }
-            )
-    return list(images), processed_targets
+    return list(images), list(targets)
 
 
 def load_dataset(
@@ -87,18 +105,35 @@ def load_dataset(
     num_workers=0 if os.name == "nt" else 4,
     verbose=True,
 ):
-
-    train_transforms = transforms.Compose(
+    train_transforms = transforms_v2.Compose(
         [
-            transforms.ColorJitter(
+            transforms_v2.ColorJitter(
                 brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1
             ),
-            transforms.ToTensor(),
+            transforms_v2.GaussianBlur(kernel_size=5, sigma=(0.1, 2.0), p=0.2),
+            transforms_v2.RandomGrayscale(p=0.1),
+            transforms_v2.RandomEqualize(p=0.1),
+            transforms_v2.RandomPosterize(bits=4, p=0.1),
+            transforms_v2.RandomAutocontrast(p=0.1),
+            transforms_v2.RandomInvert(p=0.1),
+            transforms_v2.RandomSolarize(threshold=128, p=0.1),
+            # Geometric transformations
+            transforms_v2.RandomAffine(
+                degrees=6,
+                translate=(0.1, 0.1),
+                scale=(0.8, 1.2),
+                shear=10,
+                fill=0,
+            ),
+            transforms_v2.RandomPerspective(distortion_scale=0.1, p=0.1),
+            transforms_v2.ToImage(),
+            transforms_v2.ToDtype(torch.float32, scale=True),
         ]
     )
-    valid_transforms = transforms.Compose(
+    valid_transforms = transforms_v2.Compose(
         [
-            transforms.ToTensor(),
+            transforms_v2.ToImage(),
+            transforms_v2.ToDtype(torch.float32, scale=True),
         ]
     )
     test_transforms = transforms.Compose(
@@ -106,17 +141,21 @@ def load_dataset(
             transforms.ToTensor(),
         ]
     )
-    train_dataset = torchvision.datasets.CocoDetection(
+
+    train_dataset = CocoDetectionV2(
         root=train_images_path,
         annFile=train_annotations_path,
         transform=train_transforms,
     )
-    valid_dataset = torchvision.datasets.CocoDetection(
+
+    valid_dataset = CocoDetectionV2(
         root=valid_images_path,
         annFile=valid_annotations_path,
         transform=valid_transforms,
     )
+
     test_dataset = TestDataset(image_path=test_images_path, transform=test_transforms)
+
     train_loader = DataLoader(
         train_dataset,
         batch_size=batch_size,
@@ -126,6 +165,7 @@ def load_dataset(
         drop_last=False,
         collate_fn=collate_fn,
     )
+
     valid_loader = DataLoader(
         valid_dataset,
         batch_size=batch_size,
@@ -135,6 +175,7 @@ def load_dataset(
         drop_last=False,
         collate_fn=collate_fn,
     )
+
     test_loader = DataLoader(
         test_dataset,
         batch_size=batch_size,
@@ -281,7 +322,10 @@ def evaluate(
         map_score = coco_eval.stats[0]  # AP@[0.5:0.95]
 
     # 计算 Task2 准确率
-    task2_accuracy = accuracy_score(task2_targets, task2_predictions)
+    correct_predictions = sum(
+        pred == target for pred, target in zip(task2_predictions, task2_targets)
+    )
+    task2_accuracy = correct_predictions / len(task2_targets) if task2_targets else 0
 
     avg_loss = total_loss / len(data_loader)
     print(
@@ -489,7 +533,7 @@ def test_model(
 
                 # Task2
                 sorted_indices = np.argsort([b[0] for b in boxes])  # 按 x 坐标排序
-                pred_digits = "".join([str(int(labels[i])) for i in sorted_indices])
+                pred_digits = "".join([str(int(labels[i]) - 1) for i in sorted_indices])
                 if len(pred_digits) == 0:
                     pred_digits = "-1"
                 csv_predictions.append(
@@ -517,6 +561,8 @@ def args_parser():
         description="Faster R-CNN Model for Digit Detection"
     )
     parser.add_argument("-f")
+    parser.add_argument("--HistoryManager.hist_file", default=":memory:")
+
     parser.add_argument(
         "--batch_size", type=int, default=4, help="Batch size for training and testing"
     )
