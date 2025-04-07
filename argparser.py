@@ -2,6 +2,7 @@ import os
 import torch
 import argparse
 
+
 def args_parser():
     parser = argparse.ArgumentParser(
         description="Faster R-CNN Model for Digit Detection"
@@ -25,23 +26,24 @@ def args_parser():
     parser.add_argument(
         "--score_threshold",
         type=float,
-        default=0.3,
+        default=0.55,
         help="Score threshold for filtering predictions",
     )
     parser.add_argument(
         "--trainable_backbone_layers",
         type=int,
-        default=4,
+        default=3,
         help="Number of trainable backbone layers",
     )
     parser.add_argument(
-        "--num_epochs", type=int, default=40, help="Number of training epochs"
+        "--num_epochs", type=int, default=14, help="Number of training epochs"
     )
     parser.add_argument(
         "--val_epoch_list",
         type=int,
         nargs="+",
-        default=[4, 9, 14, 19, 24, 29, 34, 39],
+        default=[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],
+        metavar="N",
         help="Epochs at which to evaluate the model",
     )
     parser.add_argument(

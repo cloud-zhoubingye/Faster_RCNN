@@ -28,8 +28,10 @@ conda create --name yourenvname python=3.12
 conda activate yourenvname
 pip install -r ./requirements.txt
 ```
-Then run the code.
-```python
+
+#### Run
+Run the code for training with following commands.
+```bash
 python ./main.py
 ```
 You can modify experiment arguements by ```--param value```, detailed as follows.  
@@ -56,5 +58,10 @@ You can modify experiment arguements by ```--param value```, detailed as follows
 | `--test_checkpoint_path`   | Path to the model checkpoint for testing      | `""`                                    |
 | `--visualize_save_path`    | Path to save visualized predictions           | `"./visualize"`                         |
 | `--checkpoint_path`        | Path to save model checkpoints                | `"./checkpoints"`                       |
-### 
+
+Then test the model.
+```bash
+python ./test.py --test_checkpoint_path ./checkpoint/your_ckpt_name.pth
+```
+
 ## Performance snapshot
