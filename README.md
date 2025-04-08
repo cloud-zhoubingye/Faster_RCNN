@@ -65,4 +65,4 @@ python ./test.py --test_checkpoint_path ./checkpoint/your_ckpt_name.pth
 ```
 
 ## Performance snapshot
-![alt text](image.png)
+![alt text](report/image.png)
