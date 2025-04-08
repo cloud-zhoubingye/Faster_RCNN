@@ -8,4 +8,5 @@ nycu-hw2-data.zip
 *.json
 __pycache__/
 result/
+report/figs/
 
