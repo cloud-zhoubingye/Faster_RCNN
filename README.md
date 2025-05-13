@@ -1,9 +1,4 @@
 # Faster R-CNN for digits detection
-This is HW2 of Visual Recognition using Deep Learning, 2025 Spring, NYCU.  
-- Student ID: 113550901  
-- Student Name: 周炳燁
-
-
 ## Introduction
 #### Overview
 This project implements a dual-task digit analysis system using Faster R-CNN with PyTorch, combining object detection and sequence recognition capabilities. The system processes images containing multiple digits (0-9) through a configurable pipeline that supports both ResNet50-FPN and MobileNetV3 backbones, featuring COCO-format data loading with augmentation, dynamic batch processing, and multi-scale training. The model architecture includes customizable trainable layers and class-aware RoI heads, optimized via AdamW with cosine annealing learning rate scheduling. Evaluation simultaneously measures detection accuracy (through COCO mAP metrics) and ordered digit sequence recognition (via spatial sorting and sklearn's accuracy_score), with outputs generated in both JSON and CSV formats. The implementation provides full training/inference workflows, visualization tools, and command-line configuration.
